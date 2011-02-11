@@ -1,6 +1,7 @@
 """ Streamline calculations """
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 
 class VelocityField:
     def __init__(self, x, y, u, v):
@@ -151,16 +152,45 @@ def allStreamlines(X, Y, U, V, res=0.1, spacing=2, maxLen=100, detectLoops=True)
     return S
 
 
-def drawStreamlines(S):
-    plt.figure()
-    plt.ioff()
-    color = 'k'
-    for s in S:
-        foo = plt.plot(s[0],s[1],color)
+def drawStreamlines(streamlines, **kwargs):
+    lw = kwargs.get('lw', 1)
 
-    plt.axis('tight')
-    plt.ion()
-    plt.draw()
+    ax = kwargs.get('ax') or plt.axes()
+
+    for streamline in streamlines:
+        plt.plot(streamline[0], streamline[1], 'k', lw=lw)
+
+    ax.axis('tight')
+
+    return ax
+
+
+def drawStreamlinesArrows(streamlines, **kwargs):
+    mutation_scale = kwargs.get('mutation_scale', 12)
+    lw = kwargs.get('lw', 1)
+
+    ax = kwargs.get('ax') or plt.axes()
+
+    for streamline in streamlines:
+        path = mpl.path.Path(np.asarray((streamline[0], streamline[1])).T)
+        patch = mpl.patches.FancyArrowPatch(path=path, arrowstyle='->', mutation_scale=mutation_scale, lw=lw)
+        ax.add_patch(patch)
+
+    ax.axis('tight')
+
+    return ax
+
+
+#def drawStreamlines(S):
+#    plt.figure()
+#    plt.ioff()
+#    color = 'k'
+#    for s in S:
+#        foo = plt.plot(s[0],s[1],color)
+#
+#    plt.axis('tight')
+#    plt.ion()
+#    plt.draw()
 
 
 def animateStreamlines(SS):
