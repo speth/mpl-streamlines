@@ -5,7 +5,7 @@ import matplotlib as mpl
 
 
 class Streamlines(object):
-    def __init__(self, X, Y, U, V, res=0.1, spacing=4, maxLen=50, detectLoops=True):
+    def __init__(self, X, Y, U, V, res=0.125, spacing=4, maxLen=50, detectLoops=True):
         """
         Compute a set of streamlines covering the given velocity field.
 
@@ -18,40 +18,84 @@ class Streamlines(object):
             before reaching maxLen points if it forms a closed loop
         """
 
-        self.field = VelocityField(X, Y, U, V)
+#        self.field = VelocityField(X, Y, U, V)
         self.spacing = spacing
         self.detectLoops = detectLoops
         self.maxLen = maxLen
         self.res = res
 
-        self.dr = self.res * np.sqrt(self.field.dx * self.field.dy)
+        xa = np.asarray(X)
+        ya = np.asarray(Y)
+        self.x = xa if xa.ndim == 1 else xa[0]
+        self.y = ya if ya.ndim == 1 else ya[:,0]
+        self.u = U
+        self.v = V
+        self.dx = (self.x[-1]-self.x[0])/(self.x.size-1) # assume a regular grid
+        self.dy = (self.y[-1]-self.y[0])/(self.y.size-1) # assume a regular grid
+        self.dr = self.res * np.sqrt(self.dx * self.dy)
 
-        self.data = []
-        while not self.field.used.all():
-            nz = np.transpose(np.logical_not(self.field.used).nonzero())
+        # marker for which regions have contours
+        self.used = np.zeros(self.u.shape, dtype=bool)
+        self.used[0] = True
+        self.used[-1] = True
+        self.used[:,0] = True
+        self.used[:,-1] = True
+
+        # Don't try to compute streamlines in regions where there is no velocity data
+        for i in range(self.x.size):
+            for j in range(self.y.size):
+                if self.u[j,i] == 0.0 and self.v[j,i] == 0.0:
+                    self.used[j,i] = True
+
+        # Make the streamlines
+        self.streamlines = []
+        while not self.used.all():
+            nz = np.transpose(np.logical_not(self.used).nonzero())
             # Make a streamline starting at the first unrepresented grid point
-            self.data.append(self.makeStreamline(self.field.x[nz[0][1]],
-                                                 self.field.y[nz[0][0]]))
+            self.streamlines.append(self.makeStreamline(self.x[nz[0][1]],
+                                                        self.y[nz[0][0]]))
 
-    def plotStreamlines(self, **kwargs):
+    def interp(self, x, y):
+        i = (x-self.x[0])/self.dx
+        ai = i % 1
+
+        j = (y-self.y[0])/self.dy
+        aj = j % 1
+
+        # Bilinear interpolation
+        u = (self.u[j,i]*(1-ai)*(1-aj) +
+             self.u[j,i+1]*ai*(1-aj) +
+             self.u[j+1,i]*(1-ai)*aj +
+             self.u[j+1,i+1]*ai*aj)
+
+        v = (self.v[j,i]*(1-ai)*(1-aj) +
+             self.v[j,i+1]*ai*(1-aj) +
+             self.v[j+1,i]*(1-ai)*aj +
+             self.v[j+1,i+1]*ai*aj)
+
+        self.used[j:j+self.spacing,i:i+self.spacing] = True
+
+        return u,v
+
+    def plot(self, **kwargs):
         lw = kwargs.get('lw', 1)
 
         ax = kwargs.get('ax') or plt.axes()
 
-        for streamline in self.data:
+        for streamline in self.streamlines:
             plt.plot(streamline[0], streamline[1], 'k', lw=lw)
 
         ax.axis('tight')
 
         return ax
 
-    def plotStreamlinesArrows(self, **kwargs):
+    def plotArrows(self, **kwargs):
         mutation_scale = kwargs.get('mutation_scale', 16) # size of the arrow head
         lw = kwargs.get('lw', 1)
 
         ax = kwargs.get('ax') or plt.axes()
 
-        for streamline in self.data:
+        for streamline in self.streamlines:
             path = mpl.path.Path(np.asarray((streamline[0], streamline[1])).T)
             patch = mpl.patches.FancyArrowPatch(path=path, arrowstyle='->',
                                                 mutation_scale=mutation_scale, lw=lw)
@@ -62,10 +106,10 @@ class Streamlines(object):
         return ax
 
     def makeStreamline(self, x0, y0):
-        xmin = self.field.x[0]
-        xmax = self.field.x[-1]
-        ymin = self.field.y[0]
-        ymax = self.field.y[-1]
+        xmin = self.x[0]
+        xmax = self.x[-1]
+        ymin = self.y[0]
+        ymax = self.y[-1]
 
         # forwards:
         sx = [x0]
@@ -75,7 +119,7 @@ class Streamlines(object):
         y = y0
         i = 0
         while xmin < x < xmax and ymin < y < ymax:
-            u, v = self.field.interp(x, y, self.spacing)
+            u, v = self.interp(x, y)
             theta = np.arctan2(v,u)
 
             x += self.dr * np.cos(theta)
@@ -99,7 +143,7 @@ class Streamlines(object):
         y = y0
         i = 0
         while xmin < x < xmax and ymin < y < ymax:
-            u, v = self.field.interp(x, y, self.spacing)
+            u, v = self.interp(x, y)
             theta = np.arctan2(v,u)
 
             x -= self.dr * np.cos(theta)
@@ -127,54 +171,3 @@ class Streamlines(object):
         D = np.array([np.hypot(x-xj, y-yj)
                       for xj,yj in zip(xVals[:-1],yVals[:-1])])
         return (D < 0.9 * self.dr).any()
-
-
-class VelocityField:
-    def __init__(self, x, y, u, v):
-        xa = np.asarray(x)
-        ya = np.asarray(y)
-        self.x = xa if xa.ndim == 1 else xa[0]
-        self.y = ya if ya.ndim == 1 else ya[:,0]
-        self.u = u
-        self.v = v
-        self.dx = (self.x[-1]-self.x[0])/(self.x.size-1) # assume a regular grid
-        self.dy = (self.y[-1]-self.y[0])/(self.y.size-1) # assume a regular grid
-
-        # marker for which regions have contours
-        self.used = np.zeros(u.shape, dtype=bool)
-        self.used[0] = True
-        self.used[-1] = True
-        self.used[:,0] = True
-        self.used[:,-1] = True
-
-        self.markEmpty()
-
-    def markEmpty(self):
-        for i in range(self.x.size):
-            for j in range(self.y.size):
-                if self.u[j,i] == 0.0 and self.v[j,i] == 0.0:
-                    self.used[j,i] = True
-
-
-    def interp(self, x, y, spacing):
-        i = (x-self.x[0])/self.dx
-        ai = i % 1
-
-        j = (y-self.y[0])/self.dy
-        aj = j % 1
-
-        # Bilinear interpolation
-        u = (self.u[j,i]*(1-ai)*(1-aj) +
-             self.u[j,i+1]*ai*(1-aj) +
-             self.u[j+1,i]*(1-ai)*aj +
-             self.u[j+1,i+1]*ai*aj)
-
-        v = (self.v[j,i]*(1-ai)*(1-aj) +
-             self.v[j,i+1]*ai*(1-aj) +
-             self.v[j+1,i]*(1-ai)*aj +
-             self.v[j+1,i+1]*ai*aj)
-
-        self.used[j:j+spacing,i:i+spacing] = True
-
-        return u,v
-
