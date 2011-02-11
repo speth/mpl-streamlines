@@ -48,9 +48,6 @@ class VelocityField:
 
         self.markEmpty()
 
-    def extents(self):
-        return self.x[0], self.x[-1], self.y[0], self.y[-1]
-
     def markEmpty(self):
         for i in range(self.x.size):
             for j in range(self.y.size):
@@ -58,8 +55,30 @@ class VelocityField:
                     self.used[j,i] = True
 
 
-def makeStreamline(field, x0, y0, res, spacing, maxLen, detectLoops=True):
+    def interp(self, x, y, spacing):
+        i = (x-self.x[0])/self.dx
+        ai = i % 1
 
+        j = (y-self.y[0])/self.dy
+        aj = j % 1
+
+        # Bilinear interpolation
+        u = (self.u[j,i]*(1-ai)*(1-aj) +
+             self.u[j,i+1]*ai*(1-aj) +
+             self.u[j+1,i]*(1-ai)*aj +
+             self.u[j+1,i+1]*ai*aj)
+
+        v = (self.v[j,i]*(1-ai)*(1-aj) +
+             self.v[j,i+1]*ai*(1-aj) +
+             self.v[j+1,i]*(1-ai)*aj +
+             self.v[j+1,i+1]*ai*aj)
+
+        self.used[j:j+spacing,i:i+spacing] = True
+
+        return u,v
+
+
+def makeStreamline(field, x0, y0, res, spacing, maxLen, detectLoops=True):
     xmin, xmax, ymin, ymax = field.extents()
     d = res*np.sqrt(field.dx*field.dy)
 
@@ -74,7 +93,7 @@ def makeStreamline(field, x0, y0, res, spacing, maxLen, detectLoops=True):
         if x >= xmax or x <= xmin or y >= ymax or y <= ymin:
             break
 
-        u, v = fixedGridInterp(field, x, y, spacing)
+        u, v = field.interp(x, y, spacing)
         theta = np.arctan2(v,u)
 
         x += d*np.cos(theta)
@@ -107,7 +126,7 @@ def makeStreamline(field, x0, y0, res, spacing, maxLen, detectLoops=True):
         if x >= xmax or x <= xmin or y >= ymax or y <= ymin:
             break
 
-        u, v = fixedGridInterp(field, x, y, spacing)
+        u, v = field.interp(x, y, spacing)
         theta = np.arctan2(v,u)
 
         x -= d*np.cos(theta)
@@ -133,37 +152,6 @@ def makeStreamline(field, x0, y0, res, spacing, maxLen, detectLoops=True):
     ry.reverse()
 
     return rx+sx, ry+sy
-
-
-def fixedGridInterp(field, x, y, spacing=None):
-    xmin, xmax, ymin, ymax = field.extents()
-
-    i = (x-xmin)/field.dx
-    ai = i % 1
-
-    j = (y-ymin)/field.dy
-    aj = j % 1
-
-    try:
-        # Bilinear interpolation
-        u = (field.u[j,i]*(1-ai)*(1-aj) +
-             field.u[j,i+1]*ai*(1-aj) +
-             field.u[j+1,i]*(1-ai)*aj +
-             field.u[j+1,i+1]*ai*aj)
-
-        v = (field.v[j,i]*(1-ai)*(1-aj) +
-             field.v[j,i+1]*ai*(1-aj) +
-             field.v[j+1,i]*(1-ai)*aj +
-             field.v[j+1,i+1]*ai*aj)
-    except IndexError:
-        print j, y, field.dy
-        print ymin, ymax
-        raise
-
-    if spacing:
-        field.used[j:j+spacing,i:i+spacing] = True
-
-    return u,v
 
 
 
