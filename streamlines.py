@@ -50,8 +50,8 @@ class Streamlines(object):
         self.maxLen = maxLen
         self.res = res
 
-        xa = np.asarray(X)
-        ya = np.asarray(Y)
+        xa = np.asanyarray(X)
+        ya = np.asanyarray(Y)
         self.x = xa if xa.ndim == 1 else xa[0]
         self.y = ya if ya.ndim == 1 else ya[:,0]
         self.u = U
@@ -81,38 +81,37 @@ class Streamlines(object):
             self.streamlines.append(self._makeStreamline(self.x[nz[0][1]],
                                                          self.y[nz[0][0]]))
 
-    def plot(self, **kwargs):
+    def plot(self, lw=1, ax=None):
         """
         Draw the computed streamline segments.
 
         Optional keyword arguments:
             lw - line width
             ax - axes to use for plotting
-        """
-        lw = kwargs.get('lw', 1)
 
-        ax = kwargs.get('ax') or plt.axes()
+        """
+        if ax is None:
+            ax = plt.gca()
 
         for streamline in self.streamlines:
-            plt.plot(streamline[0], streamline[1], 'k', lw=lw)
+            ax.plot(streamline[0], streamline[1], 'k', lw=lw)
 
         ax.axis('tight')
 
         return ax
 
-    def plotArrows(self, **kwargs):
+    def plotArrows(self, lw=1, ax=None, size=16):
         """
         Draw the computed streamline segments with arrows indicating flow direction.
 
         Optional keyword arguments:
             lw - line width
-            ax - axes to use for plotting
             size - size of the arrow head
-        """
-        arrowSize = kwargs.get('size', 16) # size of the arrow head
-        lw = kwargs.get('lw', 1)
+            ax - axes to use for plotting
 
-        ax = kwargs.get('ax') or plt.axes()
+        """
+        if ax is None:
+            ax = plt.gca()
 
         for streamline in self.streamlines:
             path = mpl.path.Path(np.asarray((streamline[0], streamline[1])).T)
